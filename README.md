@@ -1,83 +1,83 @@
-# Dr.COM Campus Auto Login
+# 九江科技职业大学校园网认证
 
-> A lightweight PowerShell script that automatically detects and logs into Dr.COM-based campus networks. No extra dependencies, runs on any Windows machine.
+> 轻量级 PowerShell 脚本，自动检测并登录 Dr.COM 校园网。零依赖，任何 Windows 电脑都能跑。
 
-## How It Works
+## 背景
+
+九江科技职业大学的校园网（Dr.COM）会不定期断链，官方客户端又不稳定。写了个脚本挂在后台，每 60 秒检测一次，发现掉线就自动重新认证。
+
+## 工作原理
 
 ```
-┌─────────────┐     ┌──────────────────┐     ┌────────────┐
-│ Check WiFi  │────→│ Detect Captive   │────→│ JSONP      │
-│ & IP ready  │     │ Portal (204 err) │     │ Login      │
-└─────────────┘     └──────────────────┘     └────────────┘
+┌──────────────┐    ┌──────────────────┐    ┌────────────┐
+│ 检测 WiFi    │───→│ 检测是否被 Portal  │───→│ JSONP 登录 │
+│ 等网络就绪    │    │ 劫持（204 检测）   │    │            │
+└──────────────┘    └──────────────────┘    └────────────┘
                                                     │
                                               ┌─────┴─────┐
-                                              │  Loop 60s  │
-                                              │  keep-alive │
+                                              │ 每 60 秒   │
+                                              │ 循环保活    │
                                               └───────────┘
 ```
 
-1. **WiFi check** — Optionally verify you're on the right SSID
-2. **Network ready** — Wait for valid IP and gateway reachability
-3. **Portal detection** — Hit standard captive-portal detection URLs:
+1. **WiFi 检测** — 可选，确认连的是校园网 SSID
+2. **等待网络就绪** — 等到拿到有效 IP、能 ping 通认证服务器
+3. **Portal 检测** — 访问几个标准检测 URL：
    - `gstatic.com/generate_204`
    - `msftconnecttest.com/redirect`
-   - Empty response = online; redirect/non-empty = behind portal
-4. **Login** — Send a GET request to `/drcom/login` with `DDDDD`/`upass` as JSONP
-5. **Keep-alive** — In `-Loop` mode, re-check every 60 seconds
+   - 返回空内容 = 已联网；重定向或非空 = 被 Portal 墙挡住了
+4. **发送登录** — 向 `/drcom/login` 发 GET 请求，携带 `DDDDD`/`upass`，走 JSONP 格式
+5. **循环保活** — `-Loop` 模式每 60 秒重跑一轮，断了自动重登
 
-## Usage
+## 使用方法
 
 ```powershell
-# Copy config template and fill in your credentials
+# 复制配置模板并填写你的账号密码
 cp config.example.ps1 config.ps1
-# Edit config.ps1 with your info
+# 编辑 config.ps1 填入真实信息
 
-# One-shot login
+# 一次性登录
 .\campus-auto-login.ps1
 
-# Force login even if online
+# 强制登录（即使已在线）
 .\campus-auto-login.ps1 -Force
 
-# Daemon mode (infinite loop, checks every 60s)
+# 守护模式（无限循环，每 60s 检测一次）
 .\campus-auto-login.ps1 -Loop
 ```
 
-### Environment Variables (Alternative to Config File)
+### 环境变量（不用配置文件也行）
 
-| Variable       | Description                | Default       |
-|----------------|----------------------------|---------------|
-| `CAMPUS_SSID`  | WiFi SSID to watch         | *(optional)*  |
-| `CAMPUS_USER`  | Your student/employee ID   | *(required)*  |
-| `CAMPUS_PASS`  | Your portal password       | *(required)*  |
-| `CAMPUS_AUTH`  | Auth server IP             | `172.16.1.2`  |
-| `CAMPUS_LOG`   | Log file path              | `$TEMP\campus-login.log` |
+| 变量           | 说明            | 默认值        |
+|----------------|----------------|---------------|
+| `CAMPUS_SSID`  | WiFi SSID      | *（可选）*    |
+| `CAMPUS_USER`  | 学号 / 工号     | *（必填）*    |
+| `CAMPUS_PASS`  | 登录密码         | *（必填）*    |
+| `CAMPUS_AUTH`  | 认证服务器 IP    | `172.16.1.2` |
+| `CAMPUS_LOG`   | 日志文件路径      | `$TEMP\campus-login.log` |
 
-### Scheduled Task (Auto-start on Boot)
+### 开机自启（任务计划程序）
 
 ```powershell
-# Run once as admin
+# 管理员身份运行一次
 $action = New-ScheduledTaskAction -Execute "powershell.exe" `
   -Argument "-WindowStyle Hidden -File `"D:\path\to\campus-auto-login.ps1`" -Loop"
 $trigger = New-ScheduledTaskTrigger -AtLogOn
 Register-ScheduledTask -TaskName "Campus Auto Login" -Action $action -Trigger $trigger -RunLevel Highest
 ```
 
-## Requirements
+## 运行环境
 
-- Windows 10/11 or Windows Server 2016+
-- PowerShell 5.1+ (built-in)
-- No external modules or packages required
+- Windows 10/11 或 Windows Server 2016+
+- PowerShell 5.1+（系统自带）
+- 不需要装任何额外模块或包
 
-## Tech Details
+## 技术细节
 
-- **Auth protocol**: Dr.COM's GET `/drcom/login` endpoint with JSONP callback
-- **Detection**: Uses `Invoke-WebRequest` on well-known captive portal detection URLs
-- **Resilience**: Retries up to 3 times, waits for network fully ready before attempting
+- **认证协议**：Dr.COM 的 GET `/drcom/login` 接口，JSONP callback 格式
+- **断网检测**：用 `Invoke-WebRequest` 访问标准 captive portal 检测 URL，判断是否被劫持
+- **容错**：最多重试 3 次，等网络完全就绪才发登录请求
 
-## Why This Exists
-
-Many Chinese university dorm networks run Dr.COM's 802.1x or web portal authentication. The portal randomly drops sessions and the built-in client is unreliable. This script runs silently in the background, re-authenticating as needed.
-
-## License
+## 许可证
 
 MIT
