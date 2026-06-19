@@ -1,0 +1,10 @@
+# Credentials
+config.ps1
+!config.example.ps1
+
+# Logs
+*.log
+
+# Windows
+Thumbs.db
+Desktop.ini
